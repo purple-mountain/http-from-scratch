@@ -4,31 +4,47 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
+
+// TODO: Maybe I can use just raw bytes instead of strings
 
 const HTTP_VERSION = 1.1
 
-func getResponse(req []byte) string {
-	res := fmt.Sprintf("HTTP/%1.1f 200 OK\r\n\r\n", HTTP_VERSION)
+var statusMsg = map[int]string{
+	200: "OK",
+	404: "Not Found",
+}
+
+func getResponse(req string) string {
+	firstLineEndIDx := strings.Index(req, "\r\n")
+	requestLine := strings.Split(req[:firstLineEndIDx], " ")
+
+	var res string
+	var statusCode int
+
+	if requestLine[1] == "/" {
+		statusCode = 200
+	} else {
+		statusCode = 404
+	}
+
+	res = fmt.Sprintf("HTTP/%1.1f %d %s\r\n\r\n", HTTP_VERSION, statusCode, statusMsg[statusCode])
 
 	return res
 }
 
 func handleClient(conn net.Conn) error {
-	buffer := make([]byte, 1024)
+	reqBuffer := make([]byte, 1024)
 
-	_, err := conn.Read(buffer)
+	_, err := conn.Read(reqBuffer)
 	if err != nil {
 		return err
 	}
 
-	res := getResponse(buffer)
+	res := getResponse(string(reqBuffer))
 
 	conn.Write([]byte(res))
-
-	// GET / HTTP / 1.1
-
-	// HTTP/1.1 200 OK\r\n\r\n
 
 	return nil
 }
@@ -48,7 +64,9 @@ func main() {
 
 	defer conn.Close()
 
-	handleClient(conn)
-
-	// conn.Read()
+	err = handleClient(conn)
+	if err != nil {
+		fmt.Println("Error reading the response: ", err.Error())
+		os.Exit(1)
+	}
 }
