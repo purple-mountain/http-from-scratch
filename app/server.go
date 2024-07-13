@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-// TODO: Maybe I can use just raw bytes instead of strings
-
 const HTTP_VERSION = 1.1
 
 var statusMsg = map[int]string{
@@ -16,20 +14,41 @@ var statusMsg = map[int]string{
 	404: "Not Found",
 }
 
-func getResponse(req string) string {
+func unpack(s []string, vars ...*string) {
+	for i := range vars {
+		*vars[i] = s[i]
+	}
+}
+
+func getRequestLine(req string) string {
 	firstLineEndIDx := strings.Index(req, "\r\n")
-	requestLine := strings.Split(req[:firstLineEndIDx], " ")
+	return req[:firstLineEndIDx]
+}
 
-	var res string
-	var statusCode int
+func getResponse(req string) string {
+	requestLine := getRequestLine(req)
 
-	if requestLine[1] == "/" {
+	var httpMethod, url, body, header string
+	var statusCode, contentLength int
+
+	unpack(strings.Split(requestLine, " "), &httpMethod, &url)
+
+	urlSegments := strings.Split(url, "/")
+
+	if urlSegments[1] == "echo" && len(urlSegments) == 3 {
+		statusCode = 200
+		body = urlSegments[2]
+		contentLength = len(body)
+		header = fmt.Sprintf("Content-Type: text/plain\r\nContent-Length: %d\r\n", contentLength)
+	} else if url == "/" {
 		statusCode = 200
 	} else {
 		statusCode = 404
 	}
 
-	res = fmt.Sprintf("HTTP/%1.1f %d %s\r\n\r\n", HTTP_VERSION, statusCode, statusMsg[statusCode])
+	statusLine := fmt.Sprintf("HTTP/%1.1f %d %s\r\n", HTTP_VERSION, statusCode, statusMsg[statusCode])
+
+	res := statusLine + header + "\r\n" + body
 
 	return res
 }
