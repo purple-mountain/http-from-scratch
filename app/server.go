@@ -25,6 +25,13 @@ func getRequestLine(req string) string {
 	return req[:firstLineEndIDx]
 }
 
+func getUserAgent(req string) string {
+	userAgentIdx := strings.Index(req, "User-Agent: ") + len("User-Agent: ")
+	userAgentEndIdx := strings.Index(req[userAgentIdx:], "\r\n") + userAgentIdx
+
+	return req[userAgentIdx:userAgentEndIdx]
+}
+
 func getResponse(req string) string {
 	requestLine := getRequestLine(req)
 
@@ -35,17 +42,21 @@ func getResponse(req string) string {
 
 	urlSegments := strings.Split(url, "/")
 
+	statusCode = 200
+	if url == "/" {
+		return fmt.Sprintf("HTTP/%1.1f %d %s\r\n", HTTP_VERSION, statusCode, statusMsg[statusCode])
+	}
+
 	if urlSegments[1] == "echo" && len(urlSegments) == 3 {
-		statusCode = 200
 		body = urlSegments[2]
-		contentLength = len(body)
-		header = fmt.Sprintf("Content-Type: text/plain\r\nContent-Length: %d\r\n", contentLength)
-	} else if url == "/" {
-		statusCode = 200
+	} else if url == "/user-agent" {
+		body = getUserAgent(req)
 	} else {
 		statusCode = 404
 	}
 
+	contentLength = len(body)
+	header = fmt.Sprintf("Content-Type: text/plain\r\nContent-Length: %d\r\n", contentLength)
 	statusLine := fmt.Sprintf("HTTP/%1.1f %d %s\r\n", HTTP_VERSION, statusCode, statusMsg[statusCode])
 
 	res := statusLine + header + "\r\n" + body
