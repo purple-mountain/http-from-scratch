@@ -44,7 +44,7 @@ func getResponse(req string) string {
 
 	statusCode = 200
 	if url == "/" {
-		return fmt.Sprintf("HTTP/%1.1f %d %s\r\n", HTTP_VERSION, statusCode, statusMsg[statusCode])
+		return fmt.Sprintf("HTTP/%1.1f %d %s\r\n\r\n", HTTP_VERSION, statusCode, statusMsg[statusCode])
 	}
 
 	if urlSegments[1] == "echo" && len(urlSegments) == 3 {
