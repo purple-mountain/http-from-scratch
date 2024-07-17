@@ -4,99 +4,101 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strings"
+	"time"
 )
-
-const HTTP_VERSION = 1.1
 
 var statusMsg = map[int]string{
 	200: "OK",
 	404: "Not Found",
 }
 
-func unpack(s []string, vars ...*string) {
-	for i := range vars {
-		*vars[i] = s[i]
-	}
+type Server struct {
+	listener net.Listener
+	conn     chan net.Conn
+	shutdown chan struct{}
+	error    chan error
 }
 
-func getRequestLine(req string) string {
-	firstLineEndIDx := strings.Index(req, "\r\n")
-	return req[:firstLineEndIDx]
-}
-
-func getUserAgent(req string) string {
-	userAgentIdx := strings.Index(req, "User-Agent: ") + len("User-Agent: ")
-	userAgentEndIdx := strings.Index(req[userAgentIdx:], "\r\n") + userAgentIdx
-
-	return req[userAgentIdx:userAgentEndIdx]
-}
-
-func getResponse(req string) string {
-	requestLine := getRequestLine(req)
-
-	var httpMethod, url, body, header string
-	var statusCode, contentLength int
-
-	unpack(strings.Split(requestLine, " "), &httpMethod, &url)
-
-	urlSegments := strings.Split(url, "/")
-
-	statusCode = 200
-	if url == "/" {
-		return fmt.Sprintf("HTTP/%1.1f %d %s\r\n\r\n", HTTP_VERSION, statusCode, statusMsg[statusCode])
-	}
-
-	if urlSegments[1] == "echo" && len(urlSegments) == 3 {
-		body = urlSegments[2]
-	} else if url == "/user-agent" {
-		body = getUserAgent(req)
-	} else {
-		statusCode = 404
-	}
-
-	contentLength = len(body)
-	header = fmt.Sprintf("Content-Type: text/plain\r\nContent-Length: %d\r\n", contentLength)
-	statusLine := fmt.Sprintf("HTTP/%1.1f %d %s\r\n", HTTP_VERSION, statusCode, statusMsg[statusCode])
-
-	res := statusLine + header + "\r\n" + body
-
-	return res
-}
-
-func handleClient(conn net.Conn) error {
+func (s *Server) HandleClient(conn net.Conn) {
+	defer conn.Close()
 	reqBuffer := make([]byte, 1024)
 
+	fmt.Println("Reading req")
 	_, err := conn.Read(reqBuffer)
 	if err != nil {
-		return err
+		s.error <- err
+		return
 	}
 
-	res := getResponse(string(reqBuffer))
+	fmt.Println("Req: ", string(reqBuffer))
+
+	res := ParseResponse(string(reqBuffer))
 
 	conn.Write([]byte(res))
-
-	return nil
 }
 
-func main() {
+func (s *Server) AcceptConnections() {
+	for {
+		select {
+		case <-s.shutdown:
+			return
+		default:
+		}
+
+		fmt.Println("Accepting connection")
+		conn, err := s.listener.Accept()
+		if err != nil {
+			continue
+		}
+
+		s.conn <- conn
+	}
+}
+
+func (s *Server) HandleConnections() {
+	for {
+		select {
+		case <-s.shutdown:
+			return
+		case conn := <-s.conn:
+			fmt.Println("Handling client")
+			go s.HandleClient(conn)
+			// TODO: add error handling
+		}
+	}
+}
+
+func (s *Server) Stop() {
+	close(s.conn)
+	close(s.shutdown)
+}
+
+func NewServer(port string) (*Server, error) {
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
 		os.Exit(1)
 	}
 
-	conn, err := l.Accept()
+	return &Server{
+		listener: l,
+		conn:     make(chan net.Conn),
+		shutdown: make(chan struct{}),
+		error:    make(chan error),
+	}, nil
+}
+
+func main() {
+	server, err := NewServer(":4221")
 	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
+		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	defer conn.Close()
+	go server.HandleConnections()
 
-	err = handleClient(conn)
-	if err != nil {
-		fmt.Println("Error reading the response: ", err.Error())
-		os.Exit(1)
-	}
+	time.Sleep(5 * time.Second)
+	server.Stop()
+
+	fmt.Println("Server was shutdown")
 }
