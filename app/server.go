@@ -93,7 +93,7 @@ func main() {
 	go server.AcceptConnections()
 	go server.HandleConnections()
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(60 * time.Second)
 	server.Stop()
 
 	fmt.Println("Server was shutdown")
