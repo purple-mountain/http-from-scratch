@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -13,10 +14,11 @@ var statusMsg = map[int]string{
 }
 
 type Server struct {
-	listener net.Listener
-	conn     chan net.Conn
-	shutdown chan struct{}
-	error    chan error
+	listener  net.Listener
+	conn      chan net.Conn
+	shutdown  chan struct{}
+	error     chan error
+	filesPath string
 }
 
 func (s *Server) HandleClient(conn net.Conn) {
@@ -29,7 +31,7 @@ func (s *Server) HandleClient(conn net.Conn) {
 		return
 	}
 
-	res := ParseResponse(string(reqBuffer))
+	res := ParseResponse(string(reqBuffer), s.filesPath)
 
 	conn.Write([]byte(res))
 }
@@ -68,7 +70,7 @@ func (s *Server) Stop() {
 	close(s.shutdown)
 }
 
-func NewServer(port string) (*Server, error) {
+func NewServer(port, filesPath string) (*Server, error) {
 	l, err := net.Listen("tcp", "0.0.0.0"+port)
 	if err != nil {
 		fmt.Println("Failed to bind to port " + port)
@@ -76,15 +78,19 @@ func NewServer(port string) (*Server, error) {
 	}
 
 	return &Server{
-		listener: l,
-		conn:     make(chan net.Conn),
-		shutdown: make(chan struct{}),
-		error:    make(chan error),
+		listener:  l,
+		conn:      make(chan net.Conn),
+		shutdown:  make(chan struct{}),
+		error:     make(chan error),
+		filesPath: filesPath,
 	}, nil
 }
 
 func main() {
-	server, err := NewServer(":4221")
+	filesPath := flag.String("directory", "/tmp/", "File storage location")
+	flag.Parse()
+
+	server, err := NewServer(":4221", *filesPath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -93,7 +99,7 @@ func main() {
 	go server.AcceptConnections()
 	go server.HandleConnections()
 
-	time.Sleep(20 * time.Second)
+	time.Sleep(60 * time.Second)
 	server.Stop()
 
 	fmt.Println("Server was shutdown")
