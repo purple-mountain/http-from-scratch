@@ -18,7 +18,7 @@ func ParseUserAgent(req string) string {
 	return req[userAgentIdx:userAgentEndIdx]
 }
 
-func ParseResponse(req, filesPath string) string {
+func ParseResponse(req, filesPath string) (string, error) {
 	var httpMethod, url, body, header string
 	var contentLength int
 
@@ -32,17 +32,35 @@ func ParseResponse(req, filesPath string) string {
 	urlSegments := strings.Split(url, "/")
 
 	if url == "/" {
-		return fmt.Sprintf("HTTP/%1.1f %d %s\r\n\r\n", httpVersion, statusCode, statusMsg[statusCode])
+		return fmt.Sprintf("HTTP/%1.1f %d %s\r\n\r\n", httpVersion, statusCode, statusMsg[statusCode]), nil
 	}
 
 	if strings.HasPrefix(url, "/echo") {
 		body = urlSegments[2]
 	} else if strings.HasPrefix(url, "/files/") {
 		fileName := urlSegments[2]
+
+		if httpMethod == "POST" {
+			statusCode = 201
+			reqBody := req[strings.Index(req, "\r\n\r\n")+len("\r\n\r\n"):]
+			fmt.Println(reqBody)
+			file, err := os.Create(filesPath + fileName)
+			if err != nil {
+				return "", err
+			}
+			_, err = file.Write([]byte(reqBody))
+			if err != nil {
+				return "", err
+			}
+
+			file.Sync()
+			return fmt.Sprintf("HTTP/%1.1f %d %s\r\n\r\n", httpVersion, statusCode, statusMsg[statusCode]), nil
+		}
+
 		data, err := os.ReadFile(filesPath + fileName)
 		if err != nil {
 			statusCode = 404
-			return fmt.Sprintf("HTTP/%1.1f %d %s\r\n\r\n", httpVersion, statusCode, statusMsg[statusCode])
+			return fmt.Sprintf("HTTP/%1.1f %d %s\r\n\r\n", httpVersion, statusCode, statusMsg[statusCode]), nil
 		}
 
 		body = string(data)
@@ -59,5 +77,5 @@ func ParseResponse(req, filesPath string) string {
 
 	res := statusLine + header + "\r\n" + body
 
-	return res
+	return res, nil
 }

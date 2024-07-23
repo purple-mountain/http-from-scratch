@@ -11,6 +11,7 @@ import (
 var statusMsg = map[int]string{
 	200: "OK",
 	404: "Not Found",
+	201: "Created",
 }
 
 type Server struct {
@@ -31,7 +32,10 @@ func (s *Server) HandleClient(conn net.Conn) {
 		return
 	}
 
-	res := ParseResponse(string(reqBuffer), s.filesPath)
+	res, err := ParseResponse(string(reqBuffer), s.filesPath)
+	if err != nil {
+		s.error <- err
+	}
 
 	conn.Write([]byte(res))
 }
