@@ -3,18 +3,20 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
 
-func parseContentEncoding(req string) string {
+func parseContentEncoding(req string) []string {
 	idx := strings.Index(req, "Accept-Encoding: ") + len("Accept-Encoding: ")
 	idxEnd := strings.Index(req[idx:], "\r\n") + idx
 
-	return req[idx:idxEnd]
+	return strings.Split(req[idx:idxEnd], ", ")
 }
 
 func ParseRequestLine(req string) string {
 	firstLineEndIDx := strings.Index(req, "\r\n")
+
 	return req[:firstLineEndIDx]
 }
 
@@ -33,7 +35,7 @@ func ParseResponse(req, filesPath string) (string, error) {
 	httpVersion := 1.1
 	contentType := "text/plain"
 	statusCode := 200
-	acceptEncoding := parseContentEncoding(req)
+	acceptedEncodings := parseContentEncoding(req)
 
 	unpack(strings.Split(requestLine, " "), &httpMethod, &url)
 
@@ -79,7 +81,7 @@ func ParseResponse(req, filesPath string) (string, error) {
 		statusCode = 404
 	}
 
-	if acceptEncoding == "gzip" {
+	if slices.Contains(acceptedEncodings, "gzip") {
 		contentEncoding = "Content-Encoding: gzip\r\n"
 	}
 
