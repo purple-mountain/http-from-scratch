@@ -1,13 +1,24 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
 
+func parseContentEncoding(req string) []string {
+	idx := strings.Index(req, "Accept-Encoding: ") + len("Accept-Encoding: ")
+	idxEnd := strings.Index(req[idx:], "\r\n") + idx
+
+	return strings.Split(req[idx:idxEnd], ", ")
+}
+
 func ParseRequestLine(req string) string {
 	firstLineEndIDx := strings.Index(req, "\r\n")
+
 	return req[:firstLineEndIDx]
 }
 
@@ -19,13 +30,14 @@ func ParseUserAgent(req string) string {
 }
 
 func ParseResponse(req, filesPath string) (string, error) {
-	var httpMethod, url, body, header string
+	var httpMethod, url, body, header, contentEncoding string
 	var contentLength int
 
 	requestLine := ParseRequestLine(req)
 	httpVersion := 1.1
 	contentType := "text/plain"
 	statusCode := 200
+	acceptedEncodings := parseContentEncoding(req)
 
 	unpack(strings.Split(requestLine, " "), &httpMethod, &url)
 
@@ -71,8 +83,17 @@ func ParseResponse(req, filesPath string) (string, error) {
 		statusCode = 404
 	}
 
+	if slices.Contains(acceptedEncodings, "gzip") {
+		var buffer bytes.Buffer
+		gWriter := gzip.NewWriter(&buffer)
+		gWriter.Write([]byte(body))
+		gWriter.Close()
+		body = buffer.String()
+		contentEncoding = "Content-Encoding: gzip\r\n"
+	}
+
 	contentLength = len(body)
-	header = fmt.Sprintf("Content-Type: %s\r\nContent-Length: %d\r\n", contentType, contentLength)
+	header = fmt.Sprintf("Content-Type: %s\r\n%sContent-Length: %d\r\n", contentType, contentEncoding, contentLength)
 	statusLine := fmt.Sprintf("HTTP/%1.1f %d %s\r\n", httpVersion, statusCode, statusMsg[statusCode])
 
 	res := statusLine + header + "\r\n" + body
