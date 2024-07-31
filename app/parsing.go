@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"os"
 	"slices"
@@ -82,6 +84,11 @@ func ParseResponse(req, filesPath string) (string, error) {
 	}
 
 	if slices.Contains(acceptedEncodings, "gzip") {
+		var buffer bytes.Buffer
+		gWriter := gzip.NewWriter(&buffer)
+		gWriter.Write([]byte(body))
+		gWriter.Close()
+		body = buffer.String()
 		contentEncoding = "Content-Encoding: gzip\r\n"
 	}
 
